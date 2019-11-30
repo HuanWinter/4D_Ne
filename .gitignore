@@ -1,6 +1,7 @@
 data/
 .ipynb_checkpoints/
 Projects/
-Src/IRI2016
+Src/IRI2016/
+Src/__pycache__/
 
 
