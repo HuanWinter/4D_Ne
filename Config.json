@@ -3,8 +3,8 @@
 
     "Names":{
         "ISR":"global_3",
-        "Project":"test_14_noVf_testdatageneration",
-        "Mode":"test",
+        "Project":"CMI_test",
+        "Mode":"main",
         "Sta_full_name":{
            "Arec":"Arecibo",
            "Mill":"Millstone Hill",
@@ -13,9 +13,9 @@
     },
 
     "Flags":{
-        "Preprocess":false,
+        "Preprocess":true,
         "Modelling":false,
-        "Accuracy":true,
+        "Accuracy":false,
         "Comparison":false,
         "Generation":true,
         "RO_predict":false

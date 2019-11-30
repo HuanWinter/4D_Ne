@@ -15,6 +15,7 @@ from shutil import copyfile
 import json
 import torch
 import ipdb
+from pyitlib import discrete_random_variable as drv
 
 # import Src
 sys.path.append("Src")
@@ -77,10 +78,9 @@ project.create()
 Print_test(ISR_range)
 time.sleep(1)
 
-num=50
+num=5
 num_init =0
 
-'''
 X = []
 Y = []
 for i in range(num_init,num_init+num):
@@ -101,7 +101,7 @@ for i in range(num_init,num_init+num):
 
 #print(np.argwhere(np.isnan(X)))
 #print(~np.isnan(X[7]))
-'''
+
 if Config['Flags']['Preprocess']:
 
     # Read and precprocess ISR data
@@ -126,6 +126,12 @@ if Config['Flags']['Preprocess']:
     #print(np.argwhere(np.isnan(X_temp)).shape)
 
     #import ipdb; ipdb.set_trace()
+    a = np.zeros(len(index_X),len(index_X))
+    for i in range(len(index_X)):
+        for j in range(i+1, len(index_X)+1):
+            a[i,j] = drv.entropy_conditional(X[index_X[i],:],X[index_X[j],:])
+
+    print(a)
 
     # Normlisation
     X,Y = project.Normlise(X_t, Y_t)
