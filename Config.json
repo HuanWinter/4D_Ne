@@ -1,0 +1,134 @@
+{
+    "_comment": "All you need to decide in this file is Mode:test or main",
+
+    "Names":{
+        "ISR":"global_3",
+        "Project":"test_14_noVf_testdatageneration",
+        "Mode":"test",
+        "Sta_full_name":{
+           "Arec":"Arecibo",
+           "Mill":"Millstone Hill",
+           "Poker":"Poker Flat"
+        }
+    },
+
+    "Flags":{
+        "Preprocess":false,
+        "Modelling":false,
+        "Accuracy":true,
+        "Comparison":false,
+        "Generation":true,
+        "RO_predict":false
+    },
+
+    "X_select":{
+        "Altitude":true,
+        "Latitude":true,
+        "Longitude":true,
+        "Azi":true,
+        "DST":true,
+        "AE":true,
+        "AP":true,
+        "F107":true,
+        "Kp":true,
+        "Vf":false,
+        "DoY":true,
+        "UT":true,
+        "hmF2":true,
+        "NmF2":true,
+	"VSH":true
+    },
+    "Y_select":{
+        "TEC":false,
+        "Ne":true
+    },
+
+    "Para_range":{
+        "NmF2":[5e4,1e6],
+        "hmF2":[200,400],
+        "DoY":[0,12],
+        "LT":[0,24],
+        "VSH":[50,400],
+        "Kp":[0,7],
+        "F107":[70,220],
+        "Altitude":[200,700],
+        "Ne":[1e4,1e6],
+        "r":[0.9,1],
+        "Latitude":[-90,90],
+        "Longitude":[-180,180],
+        "Te":[500,4000]
+    },
+
+    "NN_parameters":{
+        "Inherit_Mode":false,
+        "BATCH_SIZE":256,
+        "Seed_num":1,
+        "Train_percent":0.8,
+        "Shuffle":true,
+        "GPU":true,
+        "Num_workers":8,
+        "Hidden_layer":[16,16,8],
+        "Activation_finction":["Tanh", "Tanh", "Sigmoid"],
+        "Optim":[
+          {"mode":"SGD",
+           "Learning_rate":0.00005,
+           "momentum":0.8,
+           "weight_decay":0.001 }
+        ],
+        "Optim_ind":0,
+        "Loss":"MSELoss",
+        "epoch_num":40
+    },
+    "Test_num":{
+        "Arec":100000,
+        "Mill":300000,
+        "Poker":10000
+    },
+    "Figure_format":{
+        "png":true,
+        "eps":true,
+        "jpg":true,
+        "pdf":true
+    },
+    "Figure_size":[20,10],
+
+    "Font":{
+      "family":"Times_New_Roman",
+      "style":"normal",
+      "weight":"bold",
+      "size":40
+
+    },
+
+    "RO_predict":{
+        "Days":[80, 182, 356],
+        "Months":["mareqx","junsol","decsol"],
+        "Coords":{
+           "Arec":[28.17,5.88],
+           "Mill":[52.41,0.88],
+           "Poker":[65.65,-97.11]
+        },
+        "Coords_geog":{
+           "Arec":[18.34,-66.75],
+           "Mill":[42.62,-71.49],
+           "Poker":[65.1,-147.48]
+        },
+        "Te":{
+           "Arec":[500,2500],
+           "Mill":[1000,3000],
+           "Poker":[1000,3000]
+        },
+        "Coord_range":{
+           "Lat":10,
+           "Lon":30
+        },
+        "Alt":[200,600],
+        "LT":[0,24],
+        "Alt_res":20,
+        "Time_res":2,
+        "H_lim":400,
+        "Year":2009,
+        "Figs_size":[9,3],
+        "Density":6
+    }
+}
