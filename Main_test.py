@@ -126,12 +126,10 @@ if Config['Flags']['Preprocess']:
     #print(np.argwhere(np.isnan(X_temp)).shape)
 
     #import ipdb; ipdb.set_trace()
-    a = np.zeros(len(index_X),len(index_X))
-    for i in range(len(index_X)):
-        for j in range(i+1, len(index_X)+1):
-            a[i,j] = drv.entropy_conditional(X[index_X[i],:],X[index_X[j],:])
 
-    print(a)
+
+    # CMI
+    Mul_info = project.CMI(X,Y)
 
     # Normlisation
     X,Y = project.Normlise(X_t, Y_t)

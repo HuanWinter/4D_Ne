@@ -32,6 +32,7 @@ import h5py
 from matplotlib import cm
 from TIE_read import ncread,ncdump, TIE_grid_h_time
 from netCDF4 import Dataset
+from pyitlib import discrete_random_variable as drv
 
 ################################### Global coefficients #################
 
@@ -54,6 +55,17 @@ Test_nums = [value for value in Config['Test_num'].values()]
 
 Format_keys = [key for key in Config['Figure_format'].keys()]
 Format_values = [value for value in Config['Figure_format'].values()]
+
+index_X = []
+index_Y = []
+
+for i in range(len(X_select_keys)):
+    if X_select_values[i]:
+        #ipdb.set_trace()
+        index_X.append(i)
+for i in range(len(Y_select_keys)):
+    if Y_select_values[i]:
+        index_Y.append(i)
 
 ################################### Global Functions & Class #################
 
@@ -249,6 +261,32 @@ class Project:
         Y_out = Y[:,index].squeeze()
         #Ref = X_out[[2,3,10,11,7],:]
         return X_out, Y_out
+
+    # Condition Mutual Information (CMI)
+    def CMI(self, X, Y, savemode = True):
+        a = np.zeros([len(index_X),len(index_X)])
+        #b = np.zeros(len(index_X))
+        for i in range(len(index_X)):
+            '''
+            b[i] = int(drv.information_mutual(X[index_X[i],:],Y[index_Y,:])*10)/10
+            print('MI between '+X_select_keys[index_X[i]]+' and '+Y_select_keys[index_Y]\
+                   + ' is '+ str(b[i]))
+            '''
+            
+            for j in range(len(index_X)):
+                #ipdb.set_trace()
+                a[i,j] = int(drv.information_mutual_conditional(X[index_X[j],:],\
+                             Y[index_Y,:].T.squeeze(),X[index_X[i],:])*100)/100
+                print('Given '+X_select_keys[index_X[i]]+', MI(CMI) between '+Y_select_keys[index_Y[0]]\
+                      +' and '+X_select_keys[index_X[j]]\
+                      + ' is '+ str(a[i,j]))
+        
+
+        print(a)
+        if savemode:
+            sio.savemat(self.Temporal_path+'CMI.mat', \
+                     {'CMI':a})
+        return a 
 
     # Normlization and save mean and std of X and Y
     def Normlise(self, X, Y, savemode = True):
