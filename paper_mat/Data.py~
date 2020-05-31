@@ -1,0 +1,307 @@
+import math
+import scipy.io as sio
+import tqdm
+import torch
+import gpytorch
+from matplotlib import pyplot as plt
+import numpy as np
+import os
+import torch.nn as nn
+import numpy.linalg as LA
+import ipdb
+from torch.utils.data import TensorDataset, DataLoader
+import datetime
+#import iri2016 as iri
+#import iri2016.plots
+from pyiri2016 import IRI2016
+# Make plots inline
+%matplotlib inline
+
+smoke_test = ('CI' in os.environ)
+
+# Augumentation
+
+p = argparse.ArgumentParser(
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+p.add_argument("-RO_data", type=str,
+               default="'data/Delay/330w_0_minutes_geom_height0.mat'",
+               help="RO dataset")
+p.add_argument("-Solar_act", type=str, default="low",
+               help="Solar activity")
+p.add_argument("-Iono_data", type=str,
+               default="../../Omni_data/HRO_height0.mat",
+               help="Ionosonde dataset")
+p.add_argument("-coastline", type=str,
+               default="'../../matlab_fun/coastline.mat'",
+               help="Locations of the coastlines")
+
+args = p.parse_args()
+
+############################ load the data ############
+i = 0
+solar_act = args.Solar_act # 'high' #'low'
+#data = sio.loadmat('data/Delay/all_'+str(i)+'.mat')
+data_RO = sio.loadmat(args.RO_data)
+
+ALT = data_RO['out'][:,0]
+mLat = data_RO['out'][:,1]
+#ipdb.set_trace()
+
+mLon = data_RO['out'][:,2]
+mLT = data_RO['out'][:,3]
+VTEC0 = data_RO['out'][:,4]
+
+varis = data_RO['out'][:,5:9]
+DoY = np.array(data_RO['out'][:,9])
+VTEC1 = data_RO['out'][:,10]
+NmF2 = data_RO['out'][:,11]
+year = data_RO['out'][:,12]
+F107 = data_RO['out'][:,13]
+PF107 = data_RO['out'][:,14]
+
+Month = np.zeros(len(DoY))
+DoM = np.zeros(len(DoY))
+
+print(DoY.min())
+print(DoY.max())
+
+for i in range(len(DoY)):
+    date = datetime.datetime(int(year[i]), 1, 1) + datetime.timedelta(int(DoY[i]) - 1)
+
+    Month[i] = date.month
+    DoM[i] = date.day
+    
+
+print(DoM.min())
+print(DoM.max())
+
+LT = mLT + mLon/15
+
+for i in range(len(LT)):
+    if LT[i] >= 24:
+        LT[i] -= 24
+    elif LT[i] < 0:
+        LT[i] += 24
+
+Ref_iri = np.vstack([year,Month,DoM,LT,mLat,mLon]).T
+print(Ref_iri.shape)
+
+Vari_idx = [1,2,3,5,6,7,8,9,13,14] # 13, 14: F107, PF107
+Target = [11]
+Ref_idx = [12,13]
+
+ind = np.where((np.abs(mLat)>0) \
+                   & (~np.isnan(varis[:,0])) \
+                   #& (varis[:,0]>-30) \
+                   & (~np.isnan(varis[:,1])) \
+                   & (~np.isnan(varis[:,2])) \
+                   & (~np.isnan(varis[:,3])) \
+                   #& (varis[:,3]<120) \
+                   & (ALT>200) \
+                   & (ALT<450) \
+                   & (NmF2>np.exp(11)) \
+                   & (NmF2<np.exp(14.5))
+                   & (VTEC0 < 60)
+                   & (VTEC0 > 0)
+                   & (PF107 > 50) \
+                   & (PF107 <200) \
+                   & (~np.isnan(PF107)) \
+                   & (~np.isnan(F107)) \
+                   & (F107 > 50) \
+                   & (F107 < 200) \
+                  )[0]
+
+def seed_torch(seed):
+    np.random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+
+seed_torch(1029)
+
+data = torch.from_numpy(data_RO['out'][ind,:]).type( torch.FloatTensor )
+Ref_iri = Ref_iri[ind,:]
+#X[:,2] = torch.from_numpy(LT[ind])
+
+#Y = torch.from_numpy(np.sqrt(data['out'][ind,16]/(1.24e4))).type( torch.FloatTensor )
+
+#ipdb.set_trace()
+
+plt.hist(mLat,100)
+plt.show()
+
+#data[:,1] = np.cos(data[:,1]*np.pi/180)
+#data[:,1] = np.sin(data[:,1]*np.pi/180)
+#data[:,3] = np.sin(data[:,3]*np.pi/24)
+#data[:,9] = np.sin(data[:,9]*np.pi/365)
+
+
+ind_vtec = np.where((VTEC1[ind]>0) \
+                     & (VTEC1[ind]<VTEC0[ind]/20))[0]
+print(len(ind_vtec))
+data[ind_vtec,4] = data[ind_vtec,4]+data[ind_vtec,10]
+data[~ind_vtec,4] = data[~ind_vtec,4]*1.05
+
+print(data[:,4].max())
+print(data[:,4].min())
+
+X = data[:,Vari_idx]
+Y = data[:,Target]
+Ref = data[:,Ref_idx]
+
+
+X_save = X
+Y_save = Y
+
+#Y = (Y - Y_save.min())/(Y_save.max()-Y_save.min())
+
+#ipdb.set_trace()
+#Ref = data[:,12]
+
+
+### Normlisation
+#X = X/LA.norm(X)
+#Y = Y/LA.norm(Y)
+
+print(X[1,:])
+
+print(X.shape)
+print(Y.shape)
+
+if solar_act == 'low':
+    idx_train = np.where((Ref[:,0]!=2009) & (Ref[:,0]!=2013) & (Ref[:,1]<=120))[0]
+elif solar_act =='high':
+    idx_train = np.where((Ref[:,0]!=2009) & (Ref[:,0]!=2013) & (Ref[:,1]>=100))[0]
+
+idx_test = np.where((Ref[:,0]==2009) | (Ref[:,0]==2013))[0]
+idx_test1 = np.where((Ref[:,0]==2009) & (Ref[:,1]<=100))[0]
+idx_test2 = np.where((Ref[:,0]==2013) & (Ref[:,1]>=120))[0]
+
+# shuffle training data
+np.random.shuffle(idx_train)
+
+#idx_test_t = idx_test2
+#train_n = int(0.8 * len(X))
+train_x = X[idx_train, :].contiguous()
+train_y = Y[idx_train].contiguous()
+
+test_x1 = X[idx_test1, :].contiguous()
+test_y1 = Y[idx_test1].contiguous()
+test_x2 = X[idx_test2, :].contiguous()
+test_y2 = Y[idx_test2].contiguous()
+
+print(np.abs(test_x1[:,0]).min())
+
+############################ iono data #########################
+import scipy.io as sio
+from multiprocessing import cpu_count, Pool
+from random import sample
+import tqdm
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, axs = plt.subplots(1, figsize=[12,6])
+#plt.subplots(1, figsize=[12,6])
+axs.plot(np.array(train_x[1:100000,1]).squeeze(),
+         np.array(train_x[1:100000,0]).squeeze(),
+         'b.', markersize=0.05
+          )
+
+coastfile = '../matlab_fun/coastline.mat'
+f = sio.loadmat(coastfile)
+coast_lat = f['coastlat']
+coast_lon = f['coastlon']
+print(coast_lat.shape)
+print(coast_lon.shape)
+axs.plot(coast_lon, coast_lat, 'k.', markersize=1)
+
+data = sio.loadmat(args.Iono_data)
+
+idx_vari = [0,1,2,3,4,5,6,7,8,9]
+Ref = data['Ref']
+Y = np.array(data['Y']).squeeze()
+F107 = np.array(data['X'][:,8]).squeeze()
+PF107 = np.array(data['X'][:,9]).squeeze()
+
+#ind_2009 = np.where(((Ref[:,0]==1997) | (Ref[:,0]==2009))
+ind_2009 = np.where(((Ref[:,0]==2009))
+                    & (Y>np.exp(11)) & (Y<np.exp(14.5))
+                    & (F107<100) & (F107<180)
+                   )[0]
+
+#ind_2002 = np.where(((Ref[:,0]==2002) | (Ref[:,0]==2013))
+ind_2002 = np.where(((Ref[:,0]==2013))
+                    & (Y>np.exp(11)) & (Y<np.exp(14.5))
+                    & (F107>120) & (F107<180)
+                   )[0]
+
+if solar_act == 'low':
+    ind_train = np.where((Ref[:,0]!=2013) & (Ref[:,0]!=2009)
+                         & (Y>np.exp(11)) & (Y<np.exp(14.5))
+                         & (F107<=120) & (F107<180)
+                       )[0]
+elif solar_act =='high':
+    ind_train = np.where((Ref[:,0]!=2013) & (Ref[:,0]!=2009)
+                         & (Y>np.exp(11)) & (Y<np.exp(14.5))
+                         & (F107>=100) & (F107<180)
+                       )[0]
+
+Ref_180 = Ref
+idx = np.where(Ref[:,5]>180)[0]
+Ref_180[idx,5] = 360 - Ref_180[idx,5]
+
+
+# shuffle training data
+np.random.shuffle(ind_train)
+
+X = np.array(data['X'][:,idx_vari])
+Y = np.array(data['Y'][:,:])
+
+#print('Ref.shape=', Ref.shape)
+im = axs.plot(Ref_180[:,5], Ref_180[:,4],'r.')
+#im = axs.plot(X[:,1], X[:,0],'r.')
+
+X_iono_high, Y_iono_high = torch.from_numpy(X[ind_2002,:]).type(torch.FloatTensor),\
+                torch.from_numpy(Y[ind_2002,:]).type(torch.FloatTensor)
+
+X_iono_low, Y_iono_low = torch.from_numpy(X[ind_2009,:]).type(torch.FloatTensor),\
+                torch.from_numpy(Y[ind_2009,:]).type(torch.FloatTensor)
+
+X_iono_train, Y_iono_train = torch.from_numpy(X[ind_train,:]).type(torch.FloatTensor),\
+                torch.from_numpy(Y[ind_train,:]).type(torch.FloatTensor)
+
+train_x = torch.cat([train_x, X_iono_train])
+train_y = torch.cat([train_y, Y_iono_train])
+
+#print()
+# shuffle training data
+idx = np.arange(train_y.shape[0])
+
+#ipdb.set_trace()
+idx = np.random.shuffle(idx)
+print(idx)
+train_x, train_y = train_x[idx,:].squeeze(), train_y[idx,:].squeeze(axis=0)
+
+cores = cpu_count()
+print(cores)
+#X_save = X_train
+#Y_save = Y_train
+#print((Y_save.max() - Y_save.min()))
+
+#X_train = (X_train - X_train.min())/(X_train.max() - X_train.min())
+#Y_train = (Y_train - Y_train.min())/(Y_train.max() - Y_train.min())
+
+X_iono = X_iono_high
+Y_iono = Y_iono_high
+
+print(X_iono.shape)
+print(Y_iono.shape)
+print(train_x.shape)
+print(train_y.shape)
+#X_iono, Y_iono = X_iono.cuda(), Y_iono.cuda()
+#plt.figure()
+#plt.hist(np.log(np.array(Y_iono_train)),100)
+#plt.show()
