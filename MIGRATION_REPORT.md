@@ -228,3 +228,66 @@ Three faithful/robustness points (see module docstring + flags):
   results you intend to publish.
 - Notebooks (`*.ipynb`) and existing `*.py` were left as-is (already Python);
   only the three MATLAB files were converted.
+
+## 9. Attempt to reproduce the manuscript's ANN results (Changyong/)
+
+Scope: the paper (`Changyong/submit/main.tex`) reports an L2-ANN topside-Nₑ model
+beating IRI-2016 by 35/36/53% (COSMIC-1/GRACE/ISR), with NmF2 and hmF2 sub-models
+(NmF2 22.5% vs IRI 33.5%). This is a *different* pipeline from the MI migration
+above and is already Python. We attempted to reproduce it.
+
+Environment prepared: torch 2.4 + CUDA, PyIRI, madrigalWeb, gpytorch installed;
+GRACE RO located at `data.cosmic.ucar.edu/gnss-ro/grace/postProc/level2`; PBS
+account P28100036; jobs run via `qsub` (main→gpu).
+
+What ran (all on the real COSMIC data, on GPU):
+| model | what | result | paper |
+|---|---|---|---|
+| main Nₑ (12-feature L2-ANN, `Src/train_ne_ann.py`) | exact architecture/optimizer | RMSE 1.01×10⁵, rel-err 86% | full 15-feat: 2% |
+| NmF2 sub-model, global ANN (`Src/train_nmf2_submodel.py`) | plain net | 61% mean / **44% median** | 22.5% |
+| NmF2 sub-model, regional KISS-GP (`Src/train_nmf2_dkgp.py`) | the paper's actual model class (DNN→SKI-GP, 12 lat×LT regions, MLL, 100 iters) | **44% median** | 22.5% |
+
+Conclusion: **the manuscript's headline accuracy is NOT reproducible from the
+repository as it stands.** Evidence:
+- The result is the *same* (~44% median) across model classes (ANN ≈ KISS-GP),
+  so the gap is not "ANN vs GP".
+- It survives the mean→median metric switch (already median).
+- Notably our reconstruction (44%) is *worse than IRI's own 33.5%* — a data-driven
+  model trained on COSMIC NmF2 should beat IRI on COSMIC. That strongly implies
+  our reconstruction is **missing pipeline detail the original had**, not that the
+  paper is wrong.
+
+What's missing / unrecoverable from the repo:
+1. The prepared training tables on disk (`Data/data_4d_ne/XY_*.mat`, 12-feature,
+   no `X_ref`) **do not match the pipeline code** (`Py_Fun.Preprocess` expects 15
+   features incl. the sub-model outputs hmF2/NmF2/VSH + an `X_ref` array).
+2. The NmF2/hmF2 data-prep is spread across **out-of-order, ambiguous notebook
+   cells** mixing two `.mat` files; the **target transform (log vs linear NmF2)**,
+   exact feature normalisation order, test-set definition, and how the per-region
+   errors aggregate to "22.5%" are not unambiguously recoverable.
+3. IRI-2016, GRACE, and ISR reference data are not on disk (IRI-2016 specifically;
+   we installed PyIRI ≈ IRI-2020 as a substitute, not pursued past the sub-model gap).
+
+This is a **reproducibility gap in the released artifacts**, not a refutation of
+the paper. Closing it needs the original author's exact training/eval scripts and
+the matching 15-feature data tables. New code added for the attempt:
+`Src/train_ne_ann.py`, `Src/train_nmf2_submodel.py`, `Src/train_nmf2_dkgp.py`,
+`Src/run_train.pbs`, `Src/run_nmf2.pbs`, `Src/run_dkgp.pbs`.
+
+**Diagnostic** (`Src/diagnose_nmf2.py`): a model-agnostic gradient-boosting
+ceiling on the same features/split tops out at **38% median** rel-err, and the
+features barely associate with NmF2 — notably **local time has ~0 correlation
+and MI≈0.02** with NmF2, which is physically impossible for a clean topside
+dataset. This localises the gap to the **feature table** (the prepared inputs
+don't carry the predictive structure the paper's model used), not the model.
+
+**Figure reproduction** (from real data, no broken pipeline needed):
+- `Src/make_fig1_profile.py` -> Fig. 1 (Nₑ profile + NmF2/hmF2 + VSH linear-fit)
+  from the exact COSMIC-1 C06/DoY-319/2008 profile. VSH = 1/e-drop altitude span
+  (definition recovered from main-CPU-short.ipynb). **Faithful.**
+- `Src/make_fig3_counts.py` -> Fig. 3 (sample counts per variable, 70/15/15
+  train/cv/test). **Faithful** for the 12 available features (hmF2/NmF2/VSH absent).
+- `Src/make_fig45_errmaps.py` -> Figs. 4-5 (median rel-err / RMSE per variable,
+  on the model's held-out test split). Shows the error-vs-variable **shape**, but
+  uses this reproduction's 12-feature ANN (~49% median here), **not** the paper's
+  model -- so the magnitudes are not the paper's.

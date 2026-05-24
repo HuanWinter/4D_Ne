@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N nmf2_dkgp
+#PBS -A P28100036
+#PBS -q main
+#PBS -l select=1:ncpus=8:ngpus=1:mem=64GB
+#PBS -l walltime=01:30:00
+#PBS -j oe
+#PBS -o nmf2_dkgp.log
+set -euo pipefail
+cd /glade/work/andonghu/Workspace/4d_ne
+PY=/glade/work/andonghu/conda-envs/GONG_pred/bin/python
+echo "Host: $(hostname) Start: $(date)"
+$PY Src/train_nmf2_dkgp.py --device cuda --cap 40000 --iters 100 --target log --out Projects/nmf2_dkgp
+echo "Done: $(date)"

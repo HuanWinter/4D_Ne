@@ -1,0 +1,22 @@
+#!/bin/bash
+# Train the L2-ANN topside-Ne model on a Derecho GPU node.
+# Submit:  qsub Src/run_train.pbs    Monitor: qstat -u $USER ; tail -f train_ne.log
+#PBS -N train_ne_ann
+#PBS -A P28100036
+#PBS -q main
+#PBS -l select=1:ncpus=16:ngpus=1:mem=120GB
+#PBS -l walltime=02:00:00
+#PBS -j oe
+#PBS -o train_ne.log
+
+set -euo pipefail
+REPO=/glade/work/andonghu/Workspace/4d_ne
+PY=/glade/work/andonghu/conda-envs/GONG_pred/bin/python
+cd "$REPO"
+echo "Host: $(hostname)  Start: $(date)"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+
+$PY Src/train_ne_ann.py --xy-dir Data/data_4d_ne --device cuda \
+    --out Projects/ne_ann
+
+echo "Done: $(date)"
