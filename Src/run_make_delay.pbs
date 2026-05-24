@@ -1,0 +1,49 @@
+#!/bin/bash
+# PBS batch job: regenerate the full Data/Delay/all_<lag>.mat set on Derecho.
+#
+# EDIT before submitting:
+#   - replace PROJECT_CODE with your allocation account (run `sacct`/`qhist`,
+#     or check with your project lead).
+#   - LIST must point at the cosmic_list_local.txt produced by download_cdaac.sh.
+#
+# Submit:   qsub Src/run_make_delay.pbs
+# Monitor:  qstat -u $USER   ;   tail -f make_delay_files.log
+#
+#PBS -N make_delay_files
+#PBS -A PROJECT_CODE
+#PBS -q main
+#PBS -l select=1:ncpus=128:mpiprocs=1:ompthreads=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o make_delay_files.log
+
+set -euo pipefail
+
+REPO=/glade/work/andonghu/Workspace/4d_ne
+PY=/glade/work/andonghu/conda-envs/GONG_pred/bin/python
+LIST=/glade/derecho/scratch/andonghu/cosmic/cosmic_list_local.txt
+OUT=$REPO/Data/Delay
+
+# One thread per process: we parallelise over profiles, not within BLAS/apexpy.
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+
+cd "$REPO"
+echo "Host: $(hostname)   Start: $(date)"
+echo "List: $LIST  ($(wc -l < "$LIST") profiles)"
+
+$PY Src/make_delay_files.py \
+    --cosmic-list "$LIST" \
+    --data-dir "$OUT" \
+    --lags=-8:7 \
+    --apex-epoch day \
+    --workers 128 \
+    --omni-cache "$REPO/Data/omni2_cache" \
+    --omni-year-start 2006 --omni-year-end 2018
+
+echo "make_delay_files done: $(date)"
+ls -la "$OUT"/all_*.mat
+
+# Optional: compute the MI table right after generation.
+$PY Src/mi_regressor.py --data-dir "$OUT" --lags=-8:7 \
+    --out "$REPO/mi_results.npz"
+echo "mi_regressor done: $(date)"

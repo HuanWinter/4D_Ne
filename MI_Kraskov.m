@@ -1,3 +1,6 @@
+% DEPRECATED (2026-05-24): ported to Python in Src/mi_kraskov.py
+%   Python `mi_kraskov(X, Y, method="exact")` matches this function to ~1e-11
+%   (verified against this file via MATLAB R2024b). Kept for reference only.
 function [ I1] = MI_Kraskov( X, Y, varargin )
 %KraskovMI computes the Kraskov estimator for the mutual information.
 %   1. Input: X, Y

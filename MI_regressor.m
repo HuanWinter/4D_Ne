@@ -1,6 +1,9 @@
+% DEPRECATED (2026-05-24): ported to Python in Src/mi_regressor.py
+%   Run: python Src/mi_regressor.py --data-dir Data/Delay --lags=-8:7 --out mi_results.npz
+%   Kept for reference only.
 clear
 clc
-format long 
+format long
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%% load data
 

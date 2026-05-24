@@ -1,3 +1,6 @@
+% DEPRECATED (2026-05-24): ported to Python in Src/show_mi.py
+%   Use: from show_mi import show_mi; show_mi(MI, MI_mean, MI_std, X, vari_set)
+%   Kept for reference only.
 function show_MI(MI,MI_mean,MI_std,X,vari_set)
 %SHOW_MI Summary of this function goes here
 %   Detailed explanation goes here
