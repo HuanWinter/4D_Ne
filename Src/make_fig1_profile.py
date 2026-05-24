@@ -46,10 +46,15 @@ def compute_vsh(alt, ne, hmf2):
     i_top = drop[0]
     vsh = alt[i_top] - alt[i_sta]
     seg = slice(i_sta, i_top + 1)
+    slope = intercept = np.nan
     if (i_top - i_sta) >= 2:
-        slope, intercept = np.polyfit(alt[seg], np.log(ne[seg]), 1)
-    else:
-        slope = intercept = np.nan
+        aseg, lseg = alt[seg], np.log(ne[seg])
+        ok = np.isfinite(aseg) & np.isfinite(lseg)
+        if ok.sum() >= 2 and np.ptp(aseg[ok]) > 0:
+            try:
+                slope, intercept = np.polyfit(aseg[ok], lseg[ok], 1)
+            except np.linalg.LinAlgError:
+                pass
     return vsh, (alt, ne, i_sta, i_top), (alt[seg], ne[seg]), slope, intercept
 
 

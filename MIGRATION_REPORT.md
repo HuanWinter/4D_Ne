@@ -247,8 +247,29 @@ What ran (all on the real COSMIC data, on GPU):
 | NmF2 sub-model, global ANN (`Src/train_nmf2_submodel.py`) | plain net | 61% mean / **44% median** | 22.5% |
 | NmF2 sub-model, regional KISS-GP (`Src/train_nmf2_dkgp.py`) | the paper's actual model class (DNN→SKI-GP, 12 lat×LT regions, MLL, 100 iters) | **44% median** | 22.5% |
 
-Conclusion: **the manuscript's headline accuracy is NOT reproducible from the
-repository as it stands.** Evidence:
+**UPDATE / CORRECTION (main model IS reproducible).** The pessimistic conclusion
+below applies only to the NmF2/hmF2 *sub-models* (peak predicted from geophysics
+alone). The **main topside-Nₑ model reproduces faithfully** once the three
+measured features (NmF2=`edmax`, hmF2=`edmaxalt`, VSH=1/e-drop scale height) are
+reconstructed directly from the `ionPrf` profiles — they were simply absent from
+the prepared `XY_*.mat`. `Src/reproduce_ne_15feat.py` builds the 15-feature
+samples from the raw profiles and trains the paper's L2-ANN:
+
+| model | median rel-err | RMSE | note |
+|---|---|---|---|
+| 12-feature (XY_*.mat) | 49% | 1.0×10⁵ | missing NmF2/hmF2/VSH |
+| **15-feature (rebuilt, 40k profiles)** | **5.6%** | **0.11×10⁵** | out-of-sample yrs 2009&2013 |
+| paper full model | ~2% | 0.43×10⁵ | |
+
+`Src/make_fig45_repro.py` then regenerates Figs 4-5 (all 9 panels incl.
+ln(NmF2), hmF2) at paper-range magnitudes, and they **confirm the manuscript's
+conclusions**: (1) relative error larger at high latitude, (2) RMSE peaks at the
+equator (Nₑ magnitude), (3) relative error decreases with increasing NmF2. So
+the COSMIC main-model results and figures DO reproduce; only the sub-models
+(below) remain unconfirmed.
+
+Conclusion (sub-models only): **the NmF2/hmF2 sub-model accuracy is not
+reproducible from the repository as it stands.** Evidence:
 - The result is the *same* (~44% median) across model classes (ANN ≈ KISS-GP),
   so the gap is not "ANN vs GP".
 - It survives the mean→median metric switch (already median).

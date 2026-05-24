@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N ne15_repro
+#PBS -A P28100036
+#PBS -q main
+#PBS -l select=1:ncpus=16:ngpus=1:mem=80GB
+#PBS -l walltime=02:00:00
+#PBS -j oe
+#PBS -o ne15_repro.log
+set -euo pipefail
+cd /glade/work/andonghu/Workspace/4d_ne
+PY=/glade/work/andonghu/conda-envs/GONG_pred/bin/python
+echo "Host: $(hostname) Start: $(date)"
+$PY Src/reproduce_ne_15feat.py \
+   --list /glade/derecho/scratch/andonghu/cosmic/cosmic_list_local.txt \
+   --n-profiles 40000 --epochs 80 --device cuda --out Projects/ne15
+echo "Done: $(date)"
