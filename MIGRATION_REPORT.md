@@ -264,50 +264,39 @@ samples from the raw profiles and trains the paper's L2-ANN:
 `Src/make_fig45_repro.py` then regenerates Figs 4-5 (all 9 panels incl.
 ln(NmF2), hmF2) at paper-range magnitudes, and they **confirm the manuscript's
 conclusions**: (1) relative error larger at high latitude, (2) RMSE peaks at the
-equator (Nₑ magnitude), (3) relative error decreases with increasing NmF2. So
-the COSMIC main-model results and figures DO reproduce; only the sub-models
-(below) remain unconfirmed.
+equator (Nₑ magnitude), (3) relative error decreases with increasing NmF2.
 
-Conclusion (sub-models only): **the NmF2/hmF2 sub-model accuracy is not
-reproducible from the repository as it stands.** Evidence:
-- The result is the *same* (~44% median) across model classes (ANN ≈ KISS-GP),
-  so the gap is not "ANN vs GP".
-- It survives the mean→median metric switch (already median).
-- Notably our reconstruction (44%) is *worse than IRI's own 33.5%* — a data-driven
-  model trained on COSMIC NmF2 should beat IRI on COSMIC. That strongly implies
-  our reconstruction is **missing pipeline detail the original had**, not that the
-  paper is wrong.
+**Sub-models also reproduce (resolved).** The first attempts used the prepared
+`HRO_iono_height0.mat` and stalled at ~44% median rel-err. The diagnostic
+(`Src/diagnose_nmf2.py`) found why: in that table **local time carries ~no
+information** (corr≈0, MI≈0.02 with NmF2) — physically impossible for a clean
+topside dataset, and a gradient-boosting ceiling on it tops out at ~38%. So the
+gap was the **feature table**, not the model. Rebuilding the sub-model features
+from the raw `ionPrf` profiles (correct local time, season, F10.7/PF10.7, Kp,
+DST, AE, ap) fixes it — `Src/train_submodels.py`, out-of-sample years 2009 &
+2013:
 
-What's missing / unrecoverable from the repo:
-1. The prepared training tables on disk (`Data/data_4d_ne/XY_*.mat`, 12-feature,
-   no `X_ref`) **do not match the pipeline code** (`Py_Fun.Preprocess` expects 15
-   features incl. the sub-model outputs hmF2/NmF2/VSH + an `X_ref` array).
-2. The NmF2/hmF2 data-prep is spread across **out-of-order, ambiguous notebook
-   cells** mixing two `.mat` files; the **target transform (log vs linear NmF2)**,
-   exact feature normalisation order, test-set definition, and how the per-region
-   errors aggregate to "22.5%" are not unambiguously recoverable.
-3. IRI-2016, GRACE, and ISR reference data are not on disk (IRI-2016 specifically;
-   we installed PyIRI ≈ IRI-2020 as a substitute, not pursued past the sub-model gap).
+| sub-model | this reproduction | paper | IRI-2016 |
+|---|---|---|---|
+| NmF2 (median rel-err) | **16.7%** | 22.5% | 33.5% |
+| hmF2 (median rel-err) | **4.5%**  | 5.8%  | 10.3% |
 
-This is a **reproducibility gap in the released artifacts**, not a refutation of
-the paper. Closing it needs the original author's exact training/eval scripts and
-the matching 15-feature data tables. New code added for the attempt:
-`Src/train_ne_ann.py`, `Src/train_nmf2_submodel.py`, `Src/train_nmf2_dkgp.py`,
-`Src/run_train.pbs`, `Src/run_nmf2.pbs`, `Src/run_dkgp.pbs`.
+Both beat the paper's reported errors and IRI. So the full analysis — main 4D
+model **and** sub-models — reproduces from the raw COSMIC profiles. The earlier
+"not reproducible" verdict applied only to the broken `HRO_iono` table; it is
+overturned. (`Src/train_nmf2_submodel.py` and `Src/train_nmf2_dkgp.py` keep the
+two earlier HRO-table attempts for the record.)
 
-**Diagnostic** (`Src/diagnose_nmf2.py`): a model-agnostic gradient-boosting
-ceiling on the same features/split tops out at **38% median** rel-err, and the
-features barely associate with NmF2 — notably **local time has ~0 correlation
-and MI≈0.02** with NmF2, which is physically impossible for a clean topside
-dataset. This localises the gap to the **feature table** (the prepared inputs
-don't carry the predictive structure the paper's model used), not the model.
+Still not attempted: the 35/36/53%-vs-IRI numbers on COSMIC/GRACE/ISR, which need
+IRI-2016 + GRACE + ISR data (PyIRI ≈ IRI-2020 is installed as a substitute).
 
 **Figure reproduction** (from real data, no broken pipeline needed):
 - `Src/make_fig1_profile.py` -> Fig. 1 (Nₑ profile + NmF2/hmF2 + VSH linear-fit)
   from the exact COSMIC-1 C06/DoY-319/2008 profile. VSH = 1/e-drop altitude span
   (definition recovered from main-CPU-short.ipynb). **Faithful.**
 - `Src/make_fig3_counts.py` -> Fig. 3 (sample counts per variable, 70/15/15
-  train/cv/test). **Faithful** for the 12 available features (hmF2/NmF2/VSH absent).
+  train/cv/test). Builds all **15 variables** from the profiles, incl. hmF2,
+  NmF2 and VSH (these are not in the prepared XY tables).
 - `Src/make_fig45_errmaps.py` -> Figs. 4-5 (median rel-err / RMSE per variable,
   on the model's held-out test split). Shows the error-vs-variable **shape**, but
   uses this reproduction's 12-feature ANN (~49% median here), **not** the paper's
