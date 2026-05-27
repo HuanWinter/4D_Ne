@@ -1,38 +1,13 @@
-#!/usr/bin/env python3
-"""Plot mutual information vs time gap for each driver (3x3 grid).
-
-Faithful Python port of ``show_MI.m``. Each subplot shows, for one driver:
-the full-sample MI, the resample mean, and mean +/- 3*std envelopes, against
-the time gap (hours).
-
-Usage
------
-    from show_mi import show_mi
-    show_mi(MI, MI_mean, MI_std, X=range(-8, 8), vari_set=VARI_SET)
-
-CLI (plot a saved mi_regressor result)
---------------------------------------
-    python show_mi.py mi_results.npz --save mi_plot.png
-"""
-from __future__ import annotations
+# Plot MI vs time gap for each driver (3x3), Python version of show_MI.m.
+# Each panel: full-sample MI, resample mean, and mean +/- 3*std.
+#   python show_mi.py mi_results.npz --save mi_plot.png
 
 import argparse
-
 import matplotlib
 import numpy as np
 
 
-def show_mi(MI, MI_mean, MI_std, X, vari_set, *, save=None, show=True):
-    """Recreate the MATLAB figure(100) 3x3 MI panels.
-
-    Parameters
-    ----------
-    MI, MI_mean, MI_std : array (n_lags, n_vars)
-    X        : array (n_lags,)  time gaps in hours.
-    vari_set : list[str]        variable names (one per column).
-    save     : str or None      if given, write the figure to this path.
-    show     : bool             call plt.show() (set False for headless runs).
-    """
+def show_mi(MI, MI_mean, MI_std, X, vari_set, save=None, show=True):
     import matplotlib.pyplot as plt
 
     MI = np.asarray(MI)
@@ -55,14 +30,14 @@ def show_mi(MI, MI_mean, MI_std, X, vari_set, *, save=None, show=True):
         ax.set_xlabel("Time gap (h)")
         ax.set_ylabel("MI (nats)")
         ax.legend(fontsize=7)
-        ax.set_title(f"MI between NmF2 and {vari_set[i]}")
+        ax.set_title("MI between NmF2 and %s" % vari_set[i])
     for j in range(n_vars, len(axes)):
         axes[j].axis("off")
 
     fig.tight_layout()
     if save:
         fig.savefig(save, dpi=120)
-        print(f"Saved figure to {save}")
+        print("Saved figure to", save)
     if show:
         plt.show()
     return fig
@@ -70,8 +45,8 @@ def show_mi(MI, MI_mean, MI_std, X, vari_set, *, save=None, show=True):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Plot mi_regressor .npz results")
-    ap.add_argument("npz", help=".npz file produced by mi_regressor.py")
-    ap.add_argument("--save", default=None, help="output image path")
+    ap.add_argument("npz")
+    ap.add_argument("--save", default=None)
     ap.add_argument("--no-show", action="store_true")
     args = ap.parse_args(argv)
 

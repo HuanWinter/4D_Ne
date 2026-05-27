@@ -1,40 +1,19 @@
-#!/usr/bin/env python3
-"""Reproduce manuscript Fig. 1: the topside-ionosphere variable definitions.
+# Manuscript Fig. 1: topside variable definitions.
+# Upper: a sample COSMIC-1 Ne profile with NmF2 and hmF2 marked.
+# Lower: vertical scale height (VSH) = altitude span for Ne to drop by 1/e
+#        starting 20 km above hmF2 (ln(Ne) ~ linear topside, slope = -1/H).
+# Default profile: C06, 07:40 UT, 16 Nov 2008 (DoY 319), GPS-28.
+#   python Src/make_fig1_profile.py --file <ionPrf_...nc> --save fig1_Ne_profile.png
 
-Upper panel : a sample COSMIC-1 electron-density profile Ne(alt), marking the
-              peak density NmF2 and its height hmF2.
-Lower panel : the vertical scale height (VSH) from the topside, where ln(Ne) is
-              ~linear in altitude (slope = -1/H); VSH is the altitude span over
-              which Ne falls by 1/e, starting 20 km above hmF2.
-
-VSH definition reproduced from main-CPU-short.ipynb (cell 8):
-    ind_sta = first altitude > hmF2 + 20 km
-    ind_top = first topside altitude where ln(Ne) - ln(Ne[ind_sta]) < -1
-    VSH     = alt[ind_top] - alt[ind_sta]
-
-Default profile is the one in the paper's Fig. 1 caption:
-  COSMIC-1 C06, 07:40 UT, 16 Nov 2008 (DoY 319), GPS-28.
-
-Usage
------
-  python Src/make_fig1_profile.py \
-      --file /glade/derecho/scratch/$USER/cosmic/2008/319/ionPrf_C006.2008.319.07.40.G28_2013.3520_nc \
-      --save fig1_Ne_profile.png
-"""
-from __future__ import annotations
-import argparse, os
+import argparse
+import os
 import numpy as np
 
 
 def compute_vsh(alt, ne, hmf2):
-    """VSH = altitude span for Ne to drop by 1/e, starting 20 km above hmF2.
-
-    Returns (vsh_km, i_sta, i_top, fit_slope, fit_intercept) where the fit is
-    ln(Ne) = slope*alt + intercept over [alt_sta, alt_top] (slope = -1/H)."""
     order = np.argsort(alt)
     alt, ne = alt[order], ne[order]
-    top = (alt > hmf2 + 20) & (ne > 0)
-    idx = np.where(top)[0]
+    idx = np.where((alt > hmf2 + 20) & (ne > 0))[0]
     if idx.size < 3:
         return np.nan, None, None, np.nan, np.nan
     i_sta = idx[0]
@@ -59,9 +38,11 @@ def compute_vsh(alt, ne, hmf2):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--file", default="/glade/derecho/scratch/{user}/cosmic/2008/319/"
-                    "ionPrf_C006.2008.319.07.40.G28_2013.3520_nc".format(user=os.environ.get("USER", "andonghu")))
+    default = ("/glade/derecho/scratch/%s/cosmic/2008/319/"
+               "ionPrf_C006.2008.319.07.40.G28_2013.3520_nc"
+               % os.environ.get("USER", "andonghu"))
+    ap = argparse.ArgumentParser(description="manuscript Fig. 1")
+    ap.add_argument("--file", default=default)
     ap.add_argument("--save", default="fig1_Ne_profile.png")
     args = ap.parse_args(argv)
 
@@ -80,41 +61,38 @@ def main(argv=None):
     alt, ne = alt[good], ne[good]
 
     vsh, prof, seg, slope, intercept = compute_vsh(alt, ne, hmf2)
-    print(f"NmF2={nmf2:.3g} el/cm^3  hmF2={hmf2:.1f} km  VSH={vsh:.1f} km  "
-          f"(lat={lat:.1f}, lon={lon:.1f})")
+    print("NmF2=%.3g el/cm^3  hmF2=%.1f km  VSH=%.1f km  (lat=%.1f, lon=%.1f)"
+          % (nmf2, hmf2, vsh, lat, lon))
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 10))
 
-    # Upper: Ne profile with NmF2 / hmF2
     ax1.plot(ne / 1e5, alt, "b-", lw=1.5)
     ax1.plot(nmf2 / 1e5, hmf2, "ro", ms=9)
     ax1.axhline(hmf2, color="r", ls="--", lw=0.8)
     ax1.axvline(nmf2 / 1e5, color="r", ls="--", lw=0.8)
-    ax1.annotate(f"NmF2 = {nmf2/1e5:.2f}$\\times10^5$", (nmf2/1e5, hmf2),
-                 xytext=(nmf2/1e5*0.45, hmf2+90),
+    ax1.annotate("NmF2 = %.2f$\\times10^5$" % (nmf2 / 1e5), (nmf2 / 1e5, hmf2),
+                 xytext=(nmf2 / 1e5 * 0.45, hmf2 + 90),
                  arrowprops=dict(arrowstyle="->"), fontsize=11)
-    ax1.annotate(f"hmF2 = {hmf2:.0f} km", (nmf2/1e5*0.05, hmf2),
-                 xytext=(nmf2/1e5*0.05, hmf2-70), fontsize=11)
+    ax1.annotate("hmF2 = %.0f km" % hmf2, (nmf2 / 1e5 * 0.05, hmf2),
+                 xytext=(nmf2 / 1e5 * 0.05, hmf2 - 70), fontsize=11)
     ax1.set_xlabel("$N_e$  ($\\times10^5$ el cm$^{-3}$)")
     ax1.set_ylabel("Altitude (km)")
     ax1.set_title("Upper: $N_e$ profile (COSMIC-1 C06, 07:40 UT, DoY 319, 2008, GPS-28)")
     ax1.grid(alpha=0.3)
 
-    # Lower: topside ln(Ne) linear fit + VSH span
     if prof is not None:
         a, n, i_sta, i_top = prof
         ax2.plot(np.log(n), a, "b.", ms=3, alpha=0.5, label="ln($N_e$)")
         if np.isfinite(slope):
             yfit = np.array([a[i_sta], a[i_top]])
-            ax2.plot(intercept + slope * yfit, yfit, "g-", lw=2,
-                     label=f"linear fit (slope=-1/H)")
+            ax2.plot(intercept + slope * yfit, yfit, "g-", lw=2, label="linear fit (slope=-1/H)")
         for ai in (a[i_sta], a[i_top]):
             ax2.axhline(ai, color="r", ls="--", lw=0.8)
         ax2.annotate("", xy=(np.log(n[i_top]), a[i_top]),
                      xytext=(np.log(n[i_top]), a[i_sta]),
                      arrowprops=dict(arrowstyle="<->", color="k"))
         ax2.text(np.log(n[i_top]) + 0.1, (a[i_sta] + a[i_top]) / 2,
-                 f"VSH = {vsh:.0f} km\n(1/e drop)", fontsize=11, va="center")
+                 "VSH = %.0f km\n(1/e drop)" % vsh, fontsize=11, va="center")
         ax2.set_ylim(hmf2, a[i_top] + 60)
         ax2.legend(loc="upper right")
     ax2.set_xlabel("ln($N_e$)")
@@ -124,7 +102,7 @@ def main(argv=None):
 
     fig.tight_layout()
     fig.savefig(args.save, dpi=150)
-    print(f"saved -> {args.save}")
+    print("saved ->", args.save)
 
 
 if __name__ == "__main__":

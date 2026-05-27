@@ -1,30 +1,23 @@
-#!/usr/bin/env python3
-"""NmF2 sub-model as a regional Deep-Kernel KISS-GP (faithful to NmF2_NN_GP-HRO.ipynb).
+# NmF2 sub-model as a regional deep-kernel KISS-GP (from NmF2_NN_GP-HRO.ipynb).
+# A separate GP per (latitude x local-time) region: DNN feature extractor
+# (10->100->100->50->2) feeding a gpytorch ExactGP with GridInterpolationKernel
+# (SKI), trained on the marginal log-likelihood with AdamW. Data: HRO_iono table;
+# test = years 2009 & 2013; metric = pooled median |pred-ref|/ref.
+# (Like train_nmf2_submodel.py this only reaches ~44% on the HRO table; the
+# working sub-models are in train_submodels.py, rebuilt from raw profiles.)
+#   python Src/train_nmf2_dkgp.py --device cuda --cap 40000 --iters 100 --out Projects/nmf2_dkgp
 
-Reproduces the paper's actual NmF2 sub-model design (cells 6-8):
-  * NOT one global model -- a separate model per (latitude x local-time) region:
-    lat bins of 30 deg (with +/-5 deg buffer), 2 local-time bins.
-  * Deep Kernel Learning GP (KISS-GP / SKI): a DNN feature extractor
-    (10->100->100->50->2) feeding gpytorch ExactGP with
-    GridInterpolationKernel(ScaleKernel(RBF(ard=2)), grid_size=100).
-  * AdamW(lr=0.02), 100 iterations on the exact marginal log-likelihood.
-  * metric: MEDIAN relative error |pred-ref|/ref, pooled over test points,
-    compared to the paper (NmF2 22.5%, IRI-2016 33.5%).
+import argparse
+import json
+import os
+import time
+import numpy as np
+import scipy.io as sio
+import torch
+import gpytorch
 
-Data: Data/Delay/HRO_iono_height0.mat  (X[:,0:10], Y=NmF2, Ref[:,0]=year).
-Split: train = years not in {2009,2013}; test = {2009 (low solar), 2013 (high)}.
-
-Ambiguities in the original notebook handled explicitly (documented choices):
-  * target transform: --target {log,linear} (default log; standard for NmF2).
-  * per-region training subsample (--cap) to keep ExactGP/SKI tractable.
-These are best-effort faithful choices; see MIGRATION_REPORT.md.
-"""
-from __future__ import annotations
-import argparse, json, os, time
-import numpy as np, scipy.io as sio, torch, gpytorch
-
-FEAT = list(range(10))   # HRO X columns 0..9
-LAT_COL, LT_COL = 0, 2   # latitude, local-time columns in X
+FEAT = list(range(10))
+LAT_COL, LT_COL = 0, 2
 
 
 class FeatureExtractor(torch.nn.Sequential):
@@ -48,13 +41,13 @@ class DKGP(gpytorch.models.ExactGP):
     def forward(self, x):
         z = self.feature_extractor(x)
         z = z - z.min(0)[0]
-        z = 2 * (z / z.max(0)[0]) - 1          # scale projected features to [-1,1]
+        z = 2 * (z / z.max(0)[0]) - 1          # scale features to [-1,1]
         return gpytorch.distributions.MultivariateNormal(
             self.mean_module(z), self.covar_module(z))
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description="NmF2 sub-model (regional KISS-GP)")
     ap.add_argument("--data", default="Data/Delay/HRO_iono_height0.mat")
     ap.add_argument("--target", choices=["log", "linear"], default="log")
     ap.add_argument("--iters", type=int, default=100)
@@ -67,32 +60,39 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=1029)
     ap.add_argument("--out", default="Projects/nmf2_dkgp")
     args = ap.parse_args(argv)
-    torch.manual_seed(args.seed); np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     os.makedirs(args.out, exist_ok=True)
-    dev = torch.device(args.device); t0 = time.time()
+    dev = torch.device(args.device)
+    t0 = time.time()
 
     d = sio.loadmat(args.data)
-    X, Y, Ref = np.asarray(d["X"], float), np.asarray(d["Y"], float).ravel(), np.asarray(d["Ref"], float)
-    year, F107, PF107 = Ref[:, 0], X[:, 8], X[:, 9]
+    X = np.asarray(d["X"], float)
+    Y = np.asarray(d["Y"], float).ravel()
+    year = np.asarray(d["Ref"], float)[:, 0]
+    F107, PF107 = X[:, 8], X[:, 9]
     keep = ((Y > np.exp(11)) & (Y < np.exp(14.5)) & (F107 > 50) & (F107 < 200) &
             (PF107 > 50) & (PF107 < 200) & np.all(np.isfinite(X), 1) & np.isfinite(Y))
     X, Y, year = X[keep][:, FEAT], Y[keep], year[keep]
-    # min-max normalise features (norm_ah) using full-data range
-    lo = X.min(0); span = np.where(X.max(0) - lo == 0, 1.0, X.max(0) - lo)
+    lo = X.min(0)
+    span = np.where(X.max(0) - lo == 0, 1.0, X.max(0) - lo)
     Xn = (X - lo) / span
-    lat_n, lt_n = Xn[:, LAT_COL], Xn[:, LT_COL]   # normalised lat/LT for binning
+    lat_n, lt_n = Xn[:, LAT_COL], Xn[:, LT_COL]
     tgt = np.log(Y) if args.target == "log" else Y.copy()
-    ty_mean, ty_std = tgt.mean(), tgt.std()       # standardise target for stable GP
+    ty_mean, ty_std = tgt.mean(), tgt.std()
 
     test_mask = np.isin(year.astype(int), [2009, 2013])
-    print(f"samples={X.shape[0]} train={(~test_mask).sum()} test={test_mask.sum()} target={args.target}")
+    print("samples=%d train=%d test=%d target=%s"
+          % (X.shape[0], (~test_mask).sum(), test_mask.sum(), args.target))
 
     n_lat = 180 // args.lat_interval
     preds_all, refs_all = [], []
     for li in range(n_lat):
         lat0 = -90 + li * args.lat_interval
-        lo_b = (lat0 - args.buffer + 90) / 180.0; hi_b = (lat0 + args.lat_interval + args.buffer + 90) / 180.0
-        lo_t = (lat0 + 90) / 180.0; hi_t = (lat0 + args.lat_interval + 90) / 180.0
+        lo_b = (lat0 - args.buffer + 90) / 180.0
+        hi_b = (lat0 + args.lat_interval + args.buffer + 90) / 180.0
+        lo_t = (lat0 + 90) / 180.0
+        hi_t = (lat0 + args.lat_interval + 90) / 180.0
         for ti in range(args.lt_bins):
             t_lo, t_hi = ti / args.lt_bins, (ti + 1) / args.lt_bins
             tr = (~test_mask) & (lat_n > lo_b) & (lat_n <= hi_b) & (lt_n > t_lo) & (lt_n <= t_hi)
@@ -120,17 +120,20 @@ def main(argv=None):
                 pn = lik(model(tex)).mean.cpu().numpy()
             pred_tgt = pn * ty_std + ty_mean
             pred = np.exp(pred_tgt) if args.target == "log" else pred_tgt
-            preds_all.append(pred); refs_all.append(Y[te_i])
+            preds_all.append(pred)
+            refs_all.append(Y[te_i])
             re = np.median(np.abs(pred - Y[te_i]) / Y[te_i]) * 100
-            print(f"  lat[{lat0:+4d},{lat0+args.lat_interval:+4d}] LT-bin{ti}: "
-                  f"ntr={ntr} nte={nte} median_relerr={re:.1f}%")
+            print("  lat[%+4d,%+4d] LT-bin%d: ntr=%d nte=%d median_relerr=%.1f%%"
+                  % (lat0, lat0 + args.lat_interval, ti, ntr, nte, re))
 
-    pred = np.concatenate(preds_all); ref = np.concatenate(refs_all)
+    pred = np.concatenate(preds_all)
+    ref = np.concatenate(refs_all)
     re = np.abs(pred - ref) / ref
     med, mean = np.median(re) * 100, np.mean(re) * 100
     rmse = np.sqrt(np.mean((pred - ref) ** 2))
-    print(f"\nFINAL NmF2 DKL-GP  pooled MEDIAN rel_err={med:.2f}%  (mean={mean:.1f}%)  RMSE={rmse:.0f}")
-    print(f"      paper NmF2={22.5}%  IRI-2016={33.5}%   [{time.time()-t0:.0f}s]")
+    print("\nFINAL NmF2 DKL-GP  pooled MEDIAN rel_err=%.2f%% (mean=%.1f%%) RMSE=%.0f"
+          % (med, mean, rmse))
+    print("      paper NmF2=22.5%%  IRI-2016=33.5%%   [%.0fs]" % (time.time() - t0))
     json.dump({"median_relerr_pct": float(med), "mean_relerr_pct": float(mean),
                "rmse_el_cm3": float(rmse), "target": args.target, "cap": args.cap,
                "paper_nmf2": 22.5, "paper_iri": 33.5, "n_test_used": int(ref.size)},
