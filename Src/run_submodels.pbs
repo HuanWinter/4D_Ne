@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N submodels
+#PBS -A P28100036
+#PBS -q main
+#PBS -l select=1:ncpus=16:ngpus=1:mem=80GB
+#PBS -l walltime=02:00:00
+#PBS -j oe
+#PBS -o submodels.log
+set -euo pipefail
+cd /glade/work/andonghu/Workspace/4d_ne
+PY=/glade/work/andonghu/conda-envs/GONG_pred/bin/python
+echo "Host: $(hostname) Start: $(date)"
+$PY Src/train_submodels.py \
+   --list /glade/derecho/scratch/andonghu/cosmic/cosmic_list_local.txt \
+   --n-profiles 250000 --epochs 200 --device cuda --out Projects/submodels
+echo "Done: $(date)"
